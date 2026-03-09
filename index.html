@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Variable Weight Cursor Effect</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&display=swap" rel="stylesheet" />
+<style>
+  body {
+    margin: 0;
+    background: #58cf1f;
+    font-family: "Hanken Grotesk", sans-serif;
+    padding: 80px;
+  }
+
+  h1 {
+    margin: 0;
+    max-width: 1280px;
+    font-size: clamp(64px, 8vw, 130px);
+    line-height: 0.9;
+    letter-spacing: -0.045em;
+    text-transform: uppercase;
+    cursor: default;
+    user-select: none;
+  }
+
+  .char {
+    display: inline-block;
+    font-variation-settings: "wght" 120;
+  }
+
+  .word {
+    display: inline-block;
+    white-space: nowrap;
+  }
+
+  .space {
+    display: inline-block;
+    width: 0.24em;
+  }
+</style>
+</head>
+<body>
+  <h1 id="headline">SOAK IN THE MAGICAL GLOW OF THE ABUNDANT GARDEN</h1>
+
+  <script>
+    const heading = document.getElementById("headline");
+    const text = heading.textContent.trim();
+    heading.textContent = "";
+
+    const chars = [];
+    const charData = [];
+
+    const words = text.split(" ");
+    words.forEach((word, i) => {
+      const wordSpan = document.createElement("span");
+      wordSpan.className = "word";
+
+      for (const letter of word) {
+        const span = document.createElement("span");
+        span.className = "char";
+        span.textContent = letter;
+        wordSpan.appendChild(span);
+        chars.push(span);
+      }
+
+      heading.appendChild(wordSpan);
+
+      if (i < words.length - 1) {
+        const space = document.createElement("span");
+        space.className = "space";
+        space.innerHTML = "&nbsp;";
+        heading.appendChild(space);
+      }
+    });
+
+    const MIN_WEIGHT = 120;
+    const MAX_WEIGHT = 656.607;
+
+    const RADIUS_X = 260;
+    const RADIUS_Y = 150;
+
+    let mouseX = 0;
+    let mouseY = 0;
+    let active = false;
+    let rafId = null;
+
+    function smoothstep(t) {
+      return t * t * (3 - 2 * t);
+    }
+
+    function measureChars() {
+      charData.length = 0;
+      for (const char of chars) {
+        const rect = char.getBoundingClientRect();
+        charData.push({
+          el: char,
+          cx: rect.left + rect.width / 2,
+          cy: rect.top + rect.height / 2
+        });
+      }
+    }
+
+    function render() {
+      if (!active) {
+        rafId = null;
+        return;
+      }
+
+      for (const char of charData) {
+        const dx = (mouseX - char.cx) / RADIUS_X;
+        const dy = (mouseY - char.cy) / RADIUS_Y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        let influence = 1 - distance;
+        influence = Math.max(0, Math.min(1, influence));
+        influence = smoothstep(influence);
+
+        const weight = MIN_WEIGHT + (MAX_WEIGHT - MIN_WEIGHT) * influence;
+        char.el.style.fontVariationSettings = `"wght" ${weight}`;
+      }
+
+      rafId = requestAnimationFrame(render);
+    }
+
+    function resetWeights() {
+      for (const char of chars) {
+        char.style.fontVariationSettings = `"wght" ${MIN_WEIGHT}`;
+      }
+    }
+
+    heading.addEventListener("mouseenter", (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      active = true;
+      measureChars();
+
+      if (!rafId) {
+        rafId = requestAnimationFrame(render);
+      }
+    });
+
+    heading.addEventListener("mousemove", (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+
+    heading.addEventListener("mouseleave", () => {
+      active = false;
+      resetWeights();
+    });
+
+    window.addEventListener("resize", measureChars);
+
+    measureChars();
+    resetWeights();
+  </script>
+</body>
+</html>
