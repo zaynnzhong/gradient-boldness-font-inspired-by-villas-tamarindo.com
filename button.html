@@ -29,13 +29,13 @@
     font-size: 16px;
     line-height: 1.4;
     color: inherit;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.12em;
   }
 
   .button-underline .char {
     position: relative;
     display: inline-block;
-    font-variation-settings: "wght" 300;
+    font-variation-settings: "wght" 600;
   }
 
   .button-underline .space {
@@ -106,9 +106,10 @@
       }
     });
 
-    // For 16px text: weight 300 (rest) to 700 (peak near cursor)
+    // Default 600, lightens to 300 and peaks to 900 near cursor
     const MIN_WEIGHT = 300;
-    const MAX_WEIGHT = 700;
+    const MAX_WEIGHT = 900;
+    const DEFAULT_WEIGHT = 600;
 
     // Smaller radii for button-sized text
     const RADIUS_X = 80;
@@ -129,16 +130,26 @@
     const POINTS = 30;
     const STEP = SVG_W / POINTS;
     const MID_Y = SVG_H / 2;
-    const WOBBLE = 1.0;
+    const WOBBLE = 1.6;
 
     function noise(i, phase) {
-      return Math.sin(i * 0.5 + 1.7 + phase) * 0.6
-           + Math.sin(i * 1.3 + 3.2 + phase * 0.8) * 0.4;
+      return Math.sin(i * 0.5 + 1.7 + phase) * 0.45
+           + Math.sin(i * 1.3 + 3.2 + phase * 0.8) * 0.3
+           + Math.sin(i * 4.1 + 0.9 + phase * 1.5) * 0.25;
     }
 
-    function buildPathD(phase) {
+    // 3 strokes with slight overlaps
+    const STROKES = [
+      { start: 0, end: 0.38 },
+      { start: 0.34, end: 0.72 },
+      { start: 0.68, end: 1.0 },
+    ];
+
+    function buildStrokeD(phase, startPct, endPct) {
+      const startIdx = Math.floor(startPct * POINTS);
+      const endIdx = Math.ceil(endPct * POINTS);
       const pts = [];
-      for (let i = 0; i <= POINTS; i++) {
+      for (let i = startIdx; i <= endIdx; i++) {
         pts.push({ x: i * STEP, y: MID_Y + noise(i, phase) * WOBBLE });
       }
 
@@ -157,11 +168,17 @@
       return d;
     }
 
+    let svgPaths = [];
+
     function startWiggle() {
       if (wiggleRafId) return;
       function tick() {
-        wigglePhase += 0.08;
-        if (svgPath) svgPath.setAttribute("d", buildPathD(wigglePhase));
+        wigglePhase += 0.045;
+        svgPaths.forEach((p, i) => {
+          const s = STROKES[i];
+          // Slightly different phase per stroke for organic feel
+          p.setAttribute("d", buildStrokeD(wigglePhase + i * 0.7, s.start, s.end));
+        });
         wiggleRafId = requestAnimationFrame(tick);
       }
       wiggleRafId = requestAnimationFrame(tick);
@@ -172,8 +189,10 @@
         cancelAnimationFrame(wiggleRafId);
         wiggleRafId = null;
       }
-      // Settle back to static shape
-      if (svgPath) svgPath.setAttribute("d", buildPathD(0));
+      svgPaths.forEach((p, i) => {
+        const s = STROKES[i];
+        p.setAttribute("d", buildStrokeD(0, s.start, s.end));
+      });
     }
 
     // Smoothstep
@@ -217,7 +236,7 @@
 
     function resetWeights() {
       for (const char of chars) {
-        char.style.fontVariationSettings = `"wght" ${MIN_WEIGHT}`;
+        char.style.fontVariationSettings = `"wght" ${DEFAULT_WEIGHT}`;
       }
     }
 
@@ -250,8 +269,10 @@
       const textW = textWrap.getBoundingClientRect().width;
       svgEl.style.width = textW + "px";
       svgEl.setAttribute("viewBox", `0 0 ${SVG_W} ${SVG_H}`);
-      svgEl.innerHTML = `<path d="${buildPathD(0)}"></path>`;
-      svgPath = svgEl.querySelector("path");
+      svgEl.innerHTML = STROKES.map((s, i) =>
+        `<path d="${buildStrokeD(0, s.start, s.end)}"></path>`
+      ).join("");
+      svgPaths = Array.from(svgEl.querySelectorAll("path"));
     }
 
     measureChars();
