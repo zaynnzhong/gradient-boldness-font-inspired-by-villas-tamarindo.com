@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Variable Weight Button</title>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&display=swap" rel="stylesheet" />
+<style>
+  body {
+    margin: 0;
+    background: #ffffff;
+    font-family: "Hanken Grotesk", sans-serif;
+    padding: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+  }
+
+  .button-underline {
+    position: relative;
+    display: inline-block;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 1.4;
+    color: inherit;
+    letter-spacing: 0.05em;
+  }
+
+  .button-underline .char {
+    position: relative;
+    display: inline-block;
+    font-variation-settings: "wght" 300;
+  }
+
+  .button-underline .space {
+    display: inline-block;
+    width: 0.25em;
+  }
+
+  .button-underline .word {
+    display: inline-block;
+    white-space: nowrap;
+  }
+
+  .button-underline svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin-top: 2px;
+  }
+
+  .button-underline svg path {
+    stroke: currentColor;
+    stroke-width: 1.3;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+    fill: none;
+  }
+</style>
+</head>
+<body>
+
+  <button class="button-underline" id="btn">
+    <span class="text-wrap" id="textWrap">SEND INQUIRY</span>
+    <svg class="underline-svg" viewBox="0 0 212 12" width="212" fill="none"
+         xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    </svg>
+  </button>
+
+  <script>
+    const btn = document.getElementById("btn");
+    const textWrap = document.getElementById("textWrap");
+    const svgEl = btn.querySelector(".underline-svg");
+    const text = textWrap.textContent.trim();
+    textWrap.textContent = "";
+
+    const chars = [];
+    const charData = [];
+
+    const words = text.split(" ");
+    words.forEach((word, i) => {
+      const wordSpan = document.createElement("span");
+      wordSpan.className = "word";
+
+      for (const letter of word) {
+        const span = document.createElement("span");
+        span.className = "char";
+        span.textContent = letter;
+        wordSpan.appendChild(span);
+        chars.push(span);
+      }
+
+      textWrap.appendChild(wordSpan);
+
+      if (i < words.length - 1) {
+        const space = document.createElement("span");
+        space.className = "space";
+        space.innerHTML = "&nbsp;";
+        textWrap.appendChild(space);
+      }
+    });
+
+    // For 16px text: weight 300 (rest) to 700 (peak near cursor)
+    const MIN_WEIGHT = 300;
+    const MAX_WEIGHT = 700;
+
+    // Smaller radii for button-sized text
+    const RADIUS_X = 80;
+    const RADIUS_Y = 40;
+
+    let mouseX = 0;
+    let mouseY = 0;
+    let active = false;
+    let rafId = null;
+
+    // SVG underline — wiggle animation
+    let svgPath = null;
+    let wiggleRafId = null;
+    let wigglePhase = 0;
+
+    const SVG_W = 200;
+    const SVG_H = 6;
+    const POINTS = 30;
+    const STEP = SVG_W / POINTS;
+    const MID_Y = SVG_H / 2;
+    const WOBBLE = 1.0;
+
+    function noise(i, phase) {
+      return Math.sin(i * 0.5 + 1.7 + phase) * 0.6
+           + Math.sin(i * 1.3 + 3.2 + phase * 0.8) * 0.4;
+    }
+
+    function buildPathD(phase) {
+      const pts = [];
+      for (let i = 0; i <= POINTS; i++) {
+        pts.push({ x: i * STEP, y: MID_Y + noise(i, phase) * WOBBLE });
+      }
+
+      let d = `M${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[Math.max(i - 1, 0)];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[Math.min(i + 2, pts.length - 1)];
+        const cp1x = p1.x + (p2.x - p0.x) / 6;
+        const cp1y = p1.y + (p2.y - p0.y) / 6;
+        const cp2x = p2.x - (p3.x - p1.x) / 6;
+        const cp2y = p2.y - (p3.y - p1.y) / 6;
+        d += ` C${cp1x.toFixed(2)} ${cp1y.toFixed(2)} ${cp2x.toFixed(2)} ${cp2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+      }
+      return d;
+    }
+
+    function startWiggle() {
+      if (wiggleRafId) return;
+      function tick() {
+        wigglePhase += 0.08;
+        if (svgPath) svgPath.setAttribute("d", buildPathD(wigglePhase));
+        wiggleRafId = requestAnimationFrame(tick);
+      }
+      wiggleRafId = requestAnimationFrame(tick);
+    }
+
+    function stopWiggle() {
+      if (wiggleRafId) {
+        cancelAnimationFrame(wiggleRafId);
+        wiggleRafId = null;
+      }
+      // Settle back to static shape
+      if (svgPath) svgPath.setAttribute("d", buildPathD(0));
+    }
+
+    // Smoothstep
+    function smoothstep(t) {
+      return t * t * (3 - 2 * t);
+    }
+
+    function measureChars() {
+      charData.length = 0;
+      for (const char of chars) {
+        const rect = char.getBoundingClientRect();
+        charData.push({
+          el: char,
+          cx: rect.left + rect.width / 2,
+          cy: rect.top + rect.height / 2
+        });
+      }
+    }
+
+    function render() {
+      if (!active) {
+        rafId = null;
+        return;
+      }
+
+      for (const char of charData) {
+        const dx = (mouseX - char.cx) / RADIUS_X;
+        const dy = (mouseY - char.cy) / RADIUS_Y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        let influence = 1 - distance;
+        influence = Math.max(0, Math.min(1, influence));
+        influence = smoothstep(influence);
+
+        const weight = MIN_WEIGHT + (MAX_WEIGHT - MIN_WEIGHT) * influence;
+        char.el.style.fontVariationSettings = `"wght" ${weight}`;
+      }
+
+      rafId = requestAnimationFrame(render);
+    }
+
+    function resetWeights() {
+      for (const char of chars) {
+        char.style.fontVariationSettings = `"wght" ${MIN_WEIGHT}`;
+      }
+    }
+
+    btn.addEventListener("mouseenter", (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      active = true;
+      measureChars();
+      startWiggle();
+
+      if (!rafId) {
+        rafId = requestAnimationFrame(render);
+      }
+    });
+
+    btn.addEventListener("mousemove", (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+
+    btn.addEventListener("mouseleave", () => {
+      active = false;
+      resetWeights();
+      stopWiggle();
+    });
+
+    window.addEventListener("resize", measureChars);
+
+    function buildUnderlineSvg() {
+      const textW = textWrap.getBoundingClientRect().width;
+      svgEl.style.width = textW + "px";
+      svgEl.setAttribute("viewBox", `0 0 ${SVG_W} ${SVG_H}`);
+      svgEl.innerHTML = `<path d="${buildPathD(0)}"></path>`;
+      svgPath = svgEl.querySelector("path");
+    }
+
+    measureChars();
+    resetWeights();
+    requestAnimationFrame(buildUnderlineSvg);
+  </script>
+</body>
+</html>
